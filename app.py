@@ -6,6 +6,7 @@ Streamlit 기반 웹 UI
 import streamlit as st
 import os
 import shutil
+import tempfile
 from datetime import datetime
 from typing import List, Dict, Optional
 import pandas as pd
@@ -114,8 +115,9 @@ def show_add_music_tab():
     if uploaded_file is not None:
         st.success(f"파일 선택됨: {uploaded_file.name}")
 
-        # 파일 임시 저장
-        temp_path = os.path.join("/tmp", uploaded_file.name)
+        # 파일 임시 저장 (Windows 호환)
+        temp_dir = tempfile.gettempdir()
+        temp_path = os.path.join(temp_dir, uploaded_file.name)
         with open(temp_path, "wb") as f:
             f.write(uploaded_file.getbuffer())
 
@@ -178,39 +180,45 @@ def show_add_music_tab():
             if 'analysis_result' not in st.session_state:
                 st.error("먼저 '자동 분석 실행'을 클릭하세요!")
             else:
-                # 음악 데이터 준비
-                analysis_result = st.session_state['analysis_result']
+                try:
+                    # 음악 데이터 준비
+                    analysis_result = st.session_state['analysis_result']
 
-                music_data = {
-                    'filename': uploaded_file.name,
-                    'file_path': temp_path,
-                    'created_date': datetime.now().strftime(config.DATE_FORMAT),
-                    'suno_style': suno_style,
-                    'suno_prompt': suno_prompt,
-                    'lyrics': lyrics,
-                    'user_rating': user_rating,
-                    'user_memo': user_memo,
-                    'bpm': analysis_result['bpm'],
-                    'duration': analysis_result['duration'],
-                    'genre': analysis_result['genre'],
-                    'mood': analysis_result['mood'],
-                    'energy_level': analysis_result['energy_level'],
-                    'brightness': analysis_result['brightness'],
-                    'has_vocal': analysis_result['has_vocal'],
-                    'auto_tags': analysis_result['auto_tags'],
-                    'custom_tags': custom_tags
-                }
+                    music_data = {
+                        'filename': uploaded_file.name,
+                        'file_path': temp_path,
+                        'created_date': datetime.now().strftime(config.DATE_FORMAT),
+                        'suno_style': suno_style if suno_style else None,
+                        'suno_prompt': suno_prompt if suno_prompt else None,
+                        'lyrics': lyrics if lyrics else None,
+                        'user_rating': user_rating,
+                        'user_memo': user_memo if user_memo else None,
+                        'bpm': analysis_result['bpm'],
+                        'duration': analysis_result['duration'],
+                        'genre': analysis_result['genre'],
+                        'mood': analysis_result['mood'],
+                        'energy_level': analysis_result['energy_level'],
+                        'brightness': analysis_result['brightness'],
+                        'has_vocal': analysis_result['has_vocal'],
+                        'auto_tags': analysis_result['auto_tags'],
+                        'custom_tags': custom_tags
+                    }
 
-                # 데이터베이스에 저장
-                music_id = db.add_music(music_data)
+                    # 데이터베이스에 저장
+                    music_id = db.add_music(music_data)
 
-                st.success(f"✅ 음악이 저장되었습니다! (ID: {music_id})")
+                    st.success(f"✅ 음악이 저장되었습니다! (ID: {music_id})")
+                    st.info(f"📁 파일 위치: {temp_path}")
 
-                # 세션 상태 초기화
-                if 'analysis_result' in st.session_state:
-                    del st.session_state['analysis_result']
+                    # 세션 상태 초기화
+                    if 'analysis_result' in st.session_state:
+                        del st.session_state['analysis_result']
 
-                st.balloons()
+                    st.balloons()
+
+                except Exception as e:
+                    st.error(f"❌ 저장 실패: {str(e)}")
+                    st.error("데이터베이스 연결 또는 저장 중 오류가 발생했습니다.")
 
 
 def show_music_list_tab():
