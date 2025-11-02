@@ -57,7 +57,7 @@ echo ==========================================
 echo.
 
 REM Streamlit 실행 (로그 레벨: error, 브라우저 자동 열기)
-python -m streamlit run app.py --logger.level=error
+python -m streamlit run app.py --server.headless=false --browser.gatherUsageStats=false
 
 REM 실행 후 대기
 echo.
