@@ -1,0 +1,63 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# 가상환경
+venv/
+ENV/
+env/
+
+# 데이터베이스
+*.db
+*.sqlite
+*.sqlite3
+
+# 엑셀 내보내기
+exports/
+*.xlsx
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Streamlit
+.streamlit/
+
+# 로그
+*.log
+
+# 임시 파일
+/tmp/
+temp/
+*.tmp
+
+# 음악 파일 (대용량 파일 제외)
+*.mp3
+*.wav
+*.m4a
+*.flac
