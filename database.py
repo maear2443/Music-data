@@ -204,7 +204,16 @@ class MusicDatabase:
                      tags: Optional[List[str]] = None,
                      min_bpm: Optional[float] = None,
                      max_bpm: Optional[float] = None,
-                     mood: Optional[str] = None) -> List[Dict]:
+                     bpm_min: Optional[float] = None,
+                     bpm_max: Optional[float] = None,
+                     mood: Optional[str] = None,
+                     moods: Optional[List[str]] = None,
+                     rating_min: Optional[int] = None,
+                     energy_min: Optional[int] = None,
+                     energy_max: Optional[int] = None,
+                     brightness_min: Optional[int] = None,
+                     brightness_max: Optional[int] = None,
+                     has_vocal: Optional[int] = None) -> List[Dict]:
         """음악 검색"""
         query = "SELECT * FROM music WHERE 1=1"
         params = []
@@ -222,17 +231,55 @@ class MusicDatabase:
                 query += " AND (auto_tags LIKE ? OR custom_tags LIKE ?)"
                 params.extend([f"%{tag}%", f"%{tag}%"])
 
-        if min_bpm is not None:
+        # BPM 검색 (두 가지 파라미터 이름 지원)
+        bpm_min_val = bpm_min if bpm_min is not None else min_bpm
+        bpm_max_val = bpm_max if bpm_max is not None else max_bpm
+
+        if bpm_min_val is not None:
             query += " AND bpm >= ?"
-            params.append(min_bpm)
+            params.append(bpm_min_val)
 
-        if max_bpm is not None:
+        if bpm_max_val is not None:
             query += " AND bpm <= ?"
-            params.append(max_bpm)
+            params.append(bpm_max_val)
 
-        if mood:
+        # 분위기 검색 (단일 또는 리스트)
+        if moods:
+            # 리스트로 여러 분위기 중 하나라도 일치하면
+            mood_conditions = " OR ".join(["mood = ?" for _ in moods])
+            query += f" AND ({mood_conditions})"
+            params.extend(moods)
+        elif mood:
             query += " AND mood = ?"
             params.append(mood)
+
+        # 평가 최소값
+        if rating_min is not None:
+            query += " AND user_rating >= ?"
+            params.append(rating_min)
+
+        # 에너지 레벨
+        if energy_min is not None:
+            query += " AND energy_level >= ?"
+            params.append(energy_min)
+
+        if energy_max is not None:
+            query += " AND energy_level <= ?"
+            params.append(energy_max)
+
+        # 밝기
+        if brightness_min is not None:
+            query += " AND brightness >= ?"
+            params.append(brightness_min)
+
+        if brightness_max is not None:
+            query += " AND brightness <= ?"
+            params.append(brightness_max)
+
+        # 보컬 유무
+        if has_vocal is not None:
+            query += " AND has_vocal = ?"
+            params.append(has_vocal)
 
         query += " ORDER BY created_date DESC"
 
