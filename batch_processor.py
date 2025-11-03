@@ -306,7 +306,7 @@ class BatchProcessor:
 
             # 진행률 콜백
             if progress_callback:
-                progress = self.processed_files / self.total_files
+                progress = min(1.0, self.processed_files / self.total_files)  # 최댓값 1.0으로 제한
                 progress_callback(
                     progress=progress,
                     current=self.processed_files,

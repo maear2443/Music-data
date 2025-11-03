@@ -488,7 +488,9 @@ def show_batch_upload_tab():
                 temp_path = os.path.join(temp_dir, uploaded_file.name)
                 with open(temp_path, "wb") as f:
                     f.write(uploaded_file.getbuffer())
-                files_to_process.append(temp_path)
+                # 중복 경로 방지
+                if temp_path not in files_to_process:
+                    files_to_process.append(temp_path)
 
     else:
         # 폴더 경로 입력
