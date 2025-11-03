@@ -286,14 +286,38 @@ def show_music_list_tab():
         music = db.get_music_by_id(selected_id)
 
         if music:
+            # 편집 모드 토글
+            edit_mode = st.checkbox("✏️ 편집 모드", key=f"edit_mode_{selected_id}")
+
             col1, col2 = st.columns(2)
 
             with col1:
                 st.write("**기본 정보**")
-                st.write(f"- 파일명: {music['filename']}")
+
+                # 파일명 (편집 가능)
+                if edit_mode:
+                    new_filename = st.text_input("파일명", value=music['filename'], key=f"filename_{selected_id}")
+                else:
+                    st.write(f"- 파일명: {music['filename']}")
+
                 st.write(f"- 생성일: {music.get('created_date', '')}")
-                st.write(f"- 스타일: {music.get('suno_style', '')}")
-                st.write(f"- 평가: {'⭐' * music['user_rating'] if music.get('user_rating') else '없음'}")
+
+                # 스타일 (편집 가능)
+                if edit_mode:
+                    new_style = st.text_input("스타일", value=music.get('suno_style', ''), key=f"style_{selected_id}")
+                else:
+                    st.write(f"- 스타일: {music.get('suno_style', '')}")
+
+                # 평가 (편집 가능)
+                if edit_mode:
+                    new_rating = st.select_slider(
+                        "평가",
+                        options=config.RATING_OPTIONS,
+                        value=music.get('user_rating', 3),
+                        key=f"rating_{selected_id}"
+                    )
+                else:
+                    st.write(f"- 평가: {'⭐' * music['user_rating'] if music.get('user_rating') else '없음'}")
 
                 st.write("**분석 결과**")
                 st.write(f"- BPM: {music.get('bpm', 'N/A')}")
@@ -306,31 +330,110 @@ def show_music_list_tab():
 
             with col2:
                 st.write("**Suno 정보**")
-                st.write(f"- 프롬프트: {music.get('suno_prompt', '')}")
 
-                if music.get('lyrics'):
+                # 프롬프트 (편집 가능)
+                if edit_mode:
+                    st.write("프롬프트:")
+                    new_prompt = st.text_area(
+                        "프롬프트",
+                        value=music.get('suno_prompt', ''),
+                        height=100,
+                        key=f"prompt_{selected_id}",
+                        label_visibility="collapsed"
+                    )
+                else:
+                    st.write(f"- 프롬프트: {music.get('suno_prompt', '')}")
+
+                # 가사 (편집 가능)
+                if music.get('lyrics') or edit_mode:
                     st.write("**가사**")
-                    st.text_area("", music['lyrics'], height=150, disabled=True, label_visibility="collapsed")
+                    if edit_mode:
+                        new_lyrics = st.text_area(
+                            "가사",
+                            value=music.get('lyrics', ''),
+                            height=150,
+                            key=f"lyrics_{selected_id}",
+                            label_visibility="collapsed"
+                        )
+                    else:
+                        st.text_area("", music['lyrics'], height=150, disabled=True, label_visibility="collapsed")
 
-                if music.get('user_memo'):
+                # 메모 (편집 가능)
+                if music.get('user_memo') or edit_mode:
                     st.write("**메모**")
-                    st.text_area("", music['user_memo'], height=100, disabled=True, label_visibility="collapsed")
+                    if edit_mode:
+                        new_memo = st.text_area(
+                            "메모",
+                            value=music.get('user_memo', ''),
+                            height=100,
+                            key=f"memo_{selected_id}",
+                            label_visibility="collapsed"
+                        )
+                    else:
+                        st.text_area("", music['user_memo'], height=100, disabled=True, label_visibility="collapsed")
 
-            # 태그
+            # 태그 (편집 가능)
             st.write("**태그**")
             all_tags = music.get('auto_tags', []) + music.get('custom_tags', [])
-            if all_tags:
-                st.write(" • ".join([f"`{tag}`" for tag in all_tags]))
-            else:
-                st.write("태그 없음")
 
-            # 삭제 버튼
-            if st.button("🗑️ 이 음악 삭제", type="secondary"):
-                if db.delete_music(selected_id):
-                    st.success("음악이 삭제되었습니다.")
-                    st.rerun()
+            if edit_mode:
+                tags_str = ", ".join(all_tags)
+                new_tags = st.text_input(
+                    "태그 (쉼표로 구분)",
+                    value=tags_str,
+                    key=f"tags_{selected_id}"
+                )
+            else:
+                if all_tags:
+                    st.write(" • ".join([f"`{tag}`" for tag in all_tags]))
                 else:
-                    st.error("삭제 실패")
+                    st.write("태그 없음")
+
+            # 버튼
+            st.divider()
+
+            if edit_mode:
+                col_btn1, col_btn2 = st.columns(2)
+
+                with col_btn1:
+                    if st.button("💾 변경사항 저장", type="primary", use_container_width=True):
+                        # 업데이트할 데이터 준비
+                        update_data = {
+                            'filename': new_filename,
+                            'suno_style': new_style,
+                            'user_rating': new_rating,
+                            'suno_prompt': new_prompt,
+                            'lyrics': new_lyrics if new_lyrics else None,
+                            'user_memo': new_memo if new_memo else None,
+                        }
+
+                        # 태그 처리
+                        if new_tags:
+                            tags_list = [t.strip() for t in new_tags.split(',') if t.strip()]
+                            update_data['custom_tags'] = tags_list
+                        else:
+                            update_data['custom_tags'] = []
+
+                        if db.update_music(selected_id, update_data):
+                            st.success("✅ 저장되었습니다!")
+                            st.rerun()
+                        else:
+                            st.error("저장 실패")
+
+                with col_btn2:
+                    if st.button("🗑️ 이 음악 삭제", type="secondary", use_container_width=True):
+                        if db.delete_music(selected_id):
+                            st.success("음악이 삭제되었습니다. ID가 자동으로 재정렬됩니다.")
+                            st.rerun()
+                        else:
+                            st.error("삭제 실패")
+            else:
+                if st.button("🗑️ 이 음악 삭제", type="secondary"):
+                    if db.delete_music(selected_id):
+                        st.success("음악이 삭제되었습니다. ID가 자동으로 재정렬됩니다.")
+                        st.rerun()
+                    else:
+                        st.error("삭제 실패")
 
 
 def show_statistics_tab():

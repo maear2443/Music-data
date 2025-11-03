@@ -155,7 +155,48 @@ class MusicDatabase:
         """음악 삭제"""
         self.cursor.execute('DELETE FROM music WHERE id = ?', (music_id,))
         self.conn.commit()
-        return self.cursor.rowcount > 0
+
+        if self.cursor.rowcount > 0:
+            # 삭제 후 ID 재정렬
+            self.reorder_ids()
+            return True
+        return False
+
+    def reorder_ids(self):
+        """ID 재정렬 - 삭제로 인한 빈 번호 제거"""
+        # 모든 음악을 ID 순서로 가져오기
+        self.cursor.execute('SELECT * FROM music ORDER BY id')
+        rows = self.cursor.fetchall()
+
+        if not rows:
+            return
+
+        # 임시 테이블에 데이터 복사 (새로운 ID로)
+        self.cursor.execute('DROP TABLE IF EXISTS music_temp')
+        self.cursor.execute('''
+            CREATE TABLE music_temp AS SELECT * FROM music WHERE 1=0
+        ''')
+
+        # 새로운 ID로 데이터 삽입
+        for new_id, row in enumerate(rows, start=1):
+            cols = [desc[0] for desc in self.cursor.description]
+            placeholders = ','.join(['?' for _ in cols])
+
+            # ID를 새 번호로 변경
+            values = list(row)
+            values[0] = new_id  # 첫 번째 컬럼이 id
+
+            self.cursor.execute(f'INSERT INTO music_temp VALUES ({placeholders})', values)
+
+        # 기존 테이블 삭제하고 임시 테이블을 원래 이름으로 변경
+        self.cursor.execute('DROP TABLE music')
+        self.cursor.execute('ALTER TABLE music_temp RENAME TO music')
+
+        # AUTOINCREMENT 카운터 재설정
+        self.cursor.execute('DELETE FROM sqlite_sequence WHERE name="music"')
+        self.cursor.execute('INSERT INTO sqlite_sequence (name, seq) VALUES ("music", ?)', (len(rows),))
+
+        self.conn.commit()
 
     def search_music(self,
                      keyword: Optional[str] = None,
