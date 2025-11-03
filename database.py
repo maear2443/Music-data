@@ -171,6 +171,10 @@ class MusicDatabase:
         if not rows:
             return
 
+        # description을 먼저 저장 (CREATE TABLE 이후에는 사라짐)
+        cols = [desc[0] for desc in self.cursor.description]
+        placeholders = ','.join(['?' for _ in cols])
+
         # 임시 테이블에 데이터 복사 (새로운 ID로)
         self.cursor.execute('DROP TABLE IF EXISTS music_temp')
         self.cursor.execute('''
@@ -179,9 +183,6 @@ class MusicDatabase:
 
         # 새로운 ID로 데이터 삽입
         for new_id, row in enumerate(rows, start=1):
-            cols = [desc[0] for desc in self.cursor.description]
-            placeholders = ','.join(['?' for _ in cols])
-
             # ID를 새 번호로 변경
             values = list(row)
             values[0] = new_id  # 첫 번째 컬럼이 id
