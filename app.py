@@ -559,8 +559,11 @@ def show_batch_upload_tab():
         if use_individual:
             st.info("각 곡의 프롬프트와 가사를 입력하세요. 비워두면 공통 정보만 사용됩니다.")
 
+            if len(files_to_process) > 20:
+                st.warning(f"⚠️ {len(files_to_process)}개 파일이 있습니다. 페이지가 길어질 수 있으니 확장 패널을 접어서 사용하세요.")
+
             with st.expander("📝 개별 정보 입력", expanded=False):
-                for idx, file_path in enumerate(files_to_process[:10]):  # 처음 10개만 표시
+                for idx, file_path in enumerate(files_to_process):  # 모든 파일 표시
                     filename = os.path.basename(file_path)
                     st.markdown(f"**{idx+1}. {filename}**")
 
@@ -588,9 +591,6 @@ def show_batch_upload_tab():
                     })
 
                     st.divider()
-
-                if len(files_to_process) > 10:
-                    st.warning(f"나머지 {len(files_to_process) - 10}개 파일은 공통 정보만 사용됩니다.")
 
         # 처리 시작 버튼
         st.divider()
