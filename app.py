@@ -16,6 +16,8 @@ import config
 from database import get_database
 from audio_analyzer import get_analyzer
 from excel_exporter import get_exporter
+from batch_processor import get_batch_processor
+from mood_playlist_generator import get_mood_generator
 
 
 # 페이지 설정
@@ -25,6 +27,8 @@ st.set_page_config(**config.STREAMLIT_CONFIG)
 db = get_database()
 analyzer = get_analyzer()
 exporter = get_exporter()
+batch_processor = get_batch_processor()
+mood_generator = get_mood_generator()
 
 
 def main():
@@ -37,18 +41,31 @@ def main():
     show_sidebar()
 
     # 메인 탭
-    tab1, tab2, tab3, tab4 = st.tabs(["🎵 음악 추가", "📋 음악 목록", "📊 통계", "📥 내보내기"])
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+        "🎵 음악 추가",
+        "📁 배치 업로드",
+        "📋 음악 목록",
+        "📊 통계",
+        "🤖 AI 플레이리스트",
+        "📥 내보내기"
+    ])
 
     with tab1:
         show_add_music_tab()
 
     with tab2:
-        show_music_list_tab()
+        show_batch_upload_tab()
 
     with tab3:
-        show_statistics_tab()
+        show_music_list_tab()
 
     with tab4:
+        show_statistics_tab()
+
+    with tab5:
+        show_ai_playlist_tab()
+
+    with tab6:
         show_export_tab()
 
 
@@ -429,6 +446,362 @@ def show_export_tab():
 
         df = pd.DataFrame(preview_data)
         st.dataframe(df, use_container_width=True, hide_index=True)
+
+
+def show_batch_upload_tab():
+    """배치 업로드 탭 - 여러 곡 한번에 추가"""
+    st.header("📁 여러 곡 한번에 추가")
+
+    st.markdown("""
+    **배치 업로드 기능:**
+    - 여러 음악 파일 동시 업로드 (최대 100개)
+    - 폴더 전체 업로드
+    - 개별 곡마다 프롬프트/가사 입력 가능
+    - 자동 중복 감지
+    - 실시간 진행률 표시
+    """)
+
+    # 업로드 방식 선택
+    upload_mode = st.radio(
+        "업로드 방식 선택",
+        ["📎 파일 선택 (다중)", "📂 폴더 경로 입력"],
+        horizontal=True
+    )
+
+    files_to_process = []
+
+    if upload_mode == "📎 파일 선택 (다중)":
+        # 파일 업로더 (다중 선택)
+        uploaded_files = st.file_uploader(
+            "음악 파일 선택 (여러 개 가능)",
+            type=['mp3', 'wav', 'm4a', 'flac'],
+            accept_multiple_files=True,
+            help="Ctrl/Cmd + 클릭으로 여러 파일 선택 가능"
+        )
+
+        if uploaded_files:
+            st.success(f"✅ {len(uploaded_files)}개 파일 선택됨")
+
+            # 임시 파일로 저장
+            temp_dir = tempfile.gettempdir()
+            for uploaded_file in uploaded_files:
+                temp_path = os.path.join(temp_dir, uploaded_file.name)
+                with open(temp_path, "wb") as f:
+                    f.write(uploaded_file.getbuffer())
+                files_to_process.append(temp_path)
+
+    else:
+        # 폴더 경로 입력
+        folder_path = st.text_input(
+            "📂 폴더 경로 입력",
+            placeholder="예: C:\\Music\\Suno_Songs 또는 /home/user/music",
+            help="폴더 안의 모든 음악 파일을 찾습니다"
+        )
+
+        recursive = st.checkbox("하위 폴더도 검색", value=True)
+
+        if folder_path and st.button("🔍 폴더 스캔"):
+            if os.path.exists(folder_path):
+                files_to_process = batch_processor.find_music_files_in_folder(
+                    folder_path,
+                    recursive=recursive
+                )
+                if files_to_process:
+                    st.success(f"✅ {len(files_to_process)}개 음악 파일 발견!")
+                else:
+                    st.warning("음악 파일을 찾을 수 없습니다.")
+            else:
+                st.error("폴더가 존재하지 않습니다.")
+
+    # 파일 목록 표시
+    if files_to_process:
+        st.divider()
+        st.subheader("📋 업로드할 파일 목록")
+
+        # 파일 목록 데이터프레임
+        file_df = pd.DataFrame({
+            '번호': range(1, len(files_to_process) + 1),
+            '파일명': [os.path.basename(f) for f in files_to_process],
+            '상태': ['대기 중'] * len(files_to_process)
+        })
+        st.dataframe(file_df, use_container_width=True, hide_index=True)
+
+        st.divider()
+
+        # 공통 정보 입력
+        st.subheader("📝 공통 정보 (모든 곡에 적용)")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            common_style = st.text_input("공통 스타일", placeholder="예: K-pop, Electronic")
+            common_rating = st.select_slider("공통 평가", options=config.RATING_OPTIONS, value=3)
+
+        with col2:
+            common_tags_input = st.text_input(
+                "공통 태그",
+                placeholder="태그1, 태그2, 태그3",
+                help="쉼표로 구분"
+            )
+            common_memo = st.text_area("공통 메모", placeholder="선택사항")
+
+        common_tags = [t.strip() for t in common_tags_input.split(',')] if common_tags_input else []
+
+        # 개별 정보 입력 옵션
+        st.divider()
+        use_individual = st.checkbox(
+            "📝 각 곡마다 프롬프트/가사 입력하기",
+            help="체크하면 각 곡마다 다른 정보를 입력할 수 있습니다"
+        )
+
+        individual_data_list = []
+
+        if use_individual:
+            st.info("각 곡의 프롬프트와 가사를 입력하세요. 비워두면 공통 정보만 사용됩니다.")
+
+            with st.expander("📝 개별 정보 입력", expanded=False):
+                for idx, file_path in enumerate(files_to_process[:10]):  # 처음 10개만 표시
+                    filename = os.path.basename(file_path)
+                    st.markdown(f"**{idx+1}. {filename}**")
+
+                    col1, col2 = st.columns(2)
+
+                    with col1:
+                        prompt = st.text_area(
+                            f"프롬프트 #{idx+1}",
+                            key=f"prompt_{idx}",
+                            placeholder="Suno 프롬프트",
+                            height=100
+                        )
+
+                    with col2:
+                        lyrics = st.text_area(
+                            f"가사 #{idx+1}",
+                            key=f"lyrics_{idx}",
+                            placeholder="가사 (선택사항)",
+                            height=100
+                        )
+
+                    individual_data_list.append({
+                        'prompt': prompt if prompt else None,
+                        'lyrics': lyrics if lyrics else None
+                    })
+
+                    st.divider()
+
+                if len(files_to_process) > 10:
+                    st.warning(f"나머지 {len(files_to_process) - 10}개 파일은 공통 정보만 사용됩니다.")
+
+        # 처리 시작 버튼
+        st.divider()
+
+        if st.button("🚀 모두 분석 및 저장", type="primary", use_container_width=True):
+            # 공통 데이터 준비
+            common_data = {
+                'style': common_style if common_style else None,
+                'rating': common_rating,
+                'tags': common_tags,
+                'memo': common_memo if common_memo else None
+            }
+
+            # 프로그레스 바
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            result_container = st.empty()
+
+            # 진행률 콜백
+            def update_progress(progress, current, total, filename, status):
+                progress_bar.progress(progress)
+                status_text.text(f"처리 중: {filename} ({current}/{total}) - {status}")
+
+            # 배치 처리 실행
+            results = batch_processor.process_batch(
+                file_paths=files_to_process,
+                common_data=common_data,
+                individual_data_list=individual_data_list if use_individual else None,
+                progress_callback=update_progress
+            )
+
+            # 완료 메시지
+            progress_bar.empty()
+            status_text.empty()
+
+            st.success(f"""
+            ✅ 배치 업로드 완료!
+
+            - 성공: {results['success']}개
+            - 실패: {results['failed']}개
+            - 중복: {results['duplicates']}개
+            - 총: {results['total']}개
+            """)
+
+            # 실패한 파일 표시
+            if results['failed'] > 0:
+                with st.expander("❌ 실패한 파일 목록"):
+                    for fail in results['details']['failed']:
+                        st.error(f"- {fail['filename']}: {fail['error']}")
+
+            # 중복 파일 표시
+            if results['duplicates'] > 0:
+                with st.expander("⚠️ 중복된 파일 (건너뜀)"):
+                    for dup in results['details']['duplicates']:
+                        st.warning(f"- {dup}")
+
+            # 오류 로그 다운로드
+            if results['failed'] > 0:
+                st.divider()
+                if st.button("📥 오류 로그 다운로드"):
+                    log_content = batch_processor.get_error_log()
+                    st.download_button(
+                        label="💾 로그 다운로드",
+                        data=log_content,
+                        file_name=f"batch_errors_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log",
+                        mime="text/plain"
+                    )
+
+            st.balloons()
+
+
+def show_ai_playlist_tab():
+    """AI 플레이리스트 탭 - Gemini AI 기반 기분 플레이리스트"""
+    st.header("🤖 AI 기분 플레이리스트")
+
+    # API 키 확인
+    if not config.is_api_available('gemini'):
+        st.warning("""
+        ⚠️ Gemini API 키가 설정되지 않았습니다.
+
+        **기본 키워드 기반 분석을 사용합니다.**
+
+        더 정확한 AI 분석을 원하시면:
+        1. https://aistudio.google.com/app/apikey 에서 API 키 발급
+        2. .env 파일에 `GEMINI_API_KEY=...` 추가
+        3. 앱 재시작
+
+        📖 자세한 설명: API_SETUP_GUIDE.md 참고
+        """)
+    else:
+        st.success("✅ Gemini AI가 활성화되었습니다!")
+
+    st.markdown("""
+    **AI가 당신의 기분을 분석하여 완벽한 플레이리스트를 만들어드립니다!**
+
+    예시:
+    - "오늘 비가 와서 우울해... 혼자 조용히 있고 싶어"
+    - "헬스장 가는데 진짜 빡세게 운동하고 싶어!"
+    - "보고서 써야 하는데 집중이 안 돼..."
+    """)
+
+    st.divider()
+
+    # 기분 입력
+    mood_text = st.text_area(
+        "😊 지금 기분이나 상황을 자유롭게 적어주세요",
+        placeholder="예: 오늘 날씨가 좋아서 기분이 너무 좋아! 신나는 음악 듣고 싶어",
+        height=150,
+        help="자세히 적을수록 AI가 더 정확한 플레이리스트를 만들어줍니다"
+    )
+
+    # 곡 수 선택
+    num_songs = st.slider(
+        "플레이리스트 곡 수",
+        min_value=5,
+        max_value=50,
+        value=15,
+        step=5
+    )
+
+    # 생성 버튼
+    if st.button("✨ AI 플레이리스트 생성", type="primary", use_container_width=True):
+        if not mood_text:
+            st.error("기분이나 상황을 입력해주세요!")
+        else:
+            with st.spinner("AI가 당신의 기분을 분석하고 있습니다..."):
+                # AI 분석
+                playlist_data = mood_generator.generate_playlist_from_mood(
+                    mood_text=mood_text,
+                    num_songs=num_songs
+                )
+
+                # 결과 표시
+                st.success("✅ AI 분석 완료!")
+
+                st.divider()
+
+                # 플레이리스트 정보
+                st.subheader(f"🎵 {playlist_data['title']}")
+                st.write(f"*{playlist_data['description']}*")
+
+                st.divider()
+
+                # 조건 설명
+                st.subheader("📋 플레이리스트 조건")
+                conditions_text = mood_generator.explain_conditions(playlist_data['conditions'])
+                st.code(conditions_text)
+
+                st.divider()
+
+                # 조건에 맞는 곡 검색
+                st.subheader("🔍 조건에 맞는 곡 찾기")
+
+                matching_songs = db.search_music(**playlist_data['conditions'])
+
+                if matching_songs:
+                    # 요청한 곡 수만큼만
+                    selected_songs = matching_songs[:playlist_data['num_songs']]
+
+                    st.success(f"✅ {len(selected_songs)}개 곡 발견!")
+
+                    # 곡 목록 표시
+                    playlist_df = pd.DataFrame([{
+                        'ID': s['id'],
+                        '제목': s['filename'],
+                        'BPM': f"{s['bpm']:.0f}" if s.get('bpm') else '',
+                        '에너지': s.get('energy_level', ''),
+                        '분위기': s.get('mood', ''),
+                        '평가': '⭐' * s['user_rating'] if s.get('user_rating') else ''
+                    } for s in selected_songs])
+
+                    st.dataframe(playlist_df, use_container_width=True, hide_index=True)
+
+                    # 플레이리스트 저장 (TODO: 나중에 구현)
+                    st.info("💡 향후 업데이트: 플레이리스트 저장 기능 추가 예정")
+
+                else:
+                    st.warning("""
+                    😢 조건에 맞는 곡을 찾을 수 없습니다.
+
+                    **제안:**
+                    - 더 많은 음악을 추가해보세요
+                    - 조건을 조금 완화해보세요
+                    """)
+
+    st.divider()
+
+    # 사용 예시
+    with st.expander("💡 사용 팁"):
+        st.markdown("""
+        **효과적인 기분 표현 방법:**
+
+        1. **구체적으로**
+           - ❌ "슬퍼"
+           - ✅ "이별 후 혼자 있는데 너무 외로워"
+
+        2. **상황 설명**
+           - ❌ "운동"
+           - ✅ "헬스장에서 데드리프트 하는데 힘이 필요해"
+
+        3. **감정 + 활동**
+           - ✅ "비 오는 날 창가에서 책 읽고 싶어"
+           - ✅ "친구들이랑 드라이브 가는데 신나는 음악 필요해"
+
+        **AI가 분석하는 것들:**
+        - 감정 (슬픔, 행복, 분노, 평온 등)
+        - 에너지 레벨 (저, 중, 고)
+        - 속도 (느림, 보통, 빠름)
+        - 보컬 선호도
+        - 분위기 (밝음, 어두움)
+        """)
 
 
 if __name__ == "__main__":
