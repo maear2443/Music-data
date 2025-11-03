@@ -3,6 +3,10 @@
 """
 
 import os
+from dotenv import load_dotenv
+
+# .env 파일 로드
+load_dotenv()
 
 # 애플리케이션 설정
 APP_NAME = "🎵 내 음악 라이브러리"
@@ -103,3 +107,32 @@ RATING_OPTIONS = [1, 2, 3, 4, 5]
 # 날짜 형식
 DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 DATE_DISPLAY_FORMAT = "%Y년 %m월 %d일"
+
+# ========================================
+# API Keys (선택적)
+# ========================================
+
+# AcoustID - 음악 지문 인식
+ACOUSTID_API_KEY = os.getenv('ACOUSTID_API_KEY', '')
+
+# Last.fm - 태그, 장르 정보
+LASTFM_API_KEY = os.getenv('LASTFM_API_KEY', '')
+LASTFM_API_SECRET = os.getenv('LASTFM_API_SECRET', '')
+
+# Gemini AI - 기분 기반 플레이리스트 (선택)
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', '')
+
+# Spotify - Spotify 음악 분석 (선택)
+SPOTIFY_CLIENT_ID = os.getenv('SPOTIFY_CLIENT_ID', '')
+SPOTIFY_CLIENT_SECRET = os.getenv('SPOTIFY_CLIENT_SECRET', '')
+
+# API 사용 가능 여부 확인
+def is_api_available(api_name):
+    """API 키가 설정되어 있는지 확인"""
+    api_keys = {
+        'acoustid': ACOUSTID_API_KEY,
+        'lastfm': LASTFM_API_KEY and LASTFM_API_SECRET,
+        'gemini': GEMINI_API_KEY,
+        'spotify': SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET
+    }
+    return bool(api_keys.get(api_name.lower(), False))
